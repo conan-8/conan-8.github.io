@@ -20,6 +20,8 @@
 import * as motion from './motion.js';
 import * as state from './state.js';
 import { createStage } from './stage.js';
+import * as engine from './audio/engine.js';
+import * as soundcheck from './audio/soundcheck.js';
 
 const STATES = [
   'BOOT',
@@ -164,3 +166,32 @@ if (DEBUG) {
 // ---- first paint: BOOT -> LOBBY (legal edge, R43) ---------------------------
 
 state.go('LOBBY');
+
+// ---- Phase-1 audio harness (R-HAR) ------------------------------------------
+// Ships permanently. The ?soundcheck flag mounts the diagnostic overlay
+// (R-HAR-04); the M key toggles the master mute from anywhere — ?debug
+// included — without ever touching the digit rig above; engine.unlock()
+// is called exactly once, here and only here, so the AudioContext opens
+// at the end of boot.
+
+const SOUNDCHECK = new URLSearchParams(window.location.search).has('soundcheck');
+if (SOUNDCHECK) soundcheck.mount(document.body);
+
+// M toggles mute. Deliberately a separate listener from the ?debug rig:
+// it never calls preventDefault() and never looks at digits 0-4, so the
+// forced-jump keys keep working unchanged. Keystrokes that land inside a
+// form field are ignored so typing an "m" never silences the shaft.
+window.addEventListener('keydown', (event) => {
+  if (event.key.toLowerCase() !== 'm') return;
+  const target = event.target;
+  if (
+    target &&
+    typeof target.closest === 'function' &&
+    target.closest('input, textarea, [contenteditable]')
+  ) {
+    return;
+  }
+  engine.setMuted(!engine.isMuted());
+});
+
+engine.unlock();
