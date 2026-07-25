@@ -1,0 +1,783 @@
+/* ===========================================================================
+   THE ELEVATOR — styles/lobby.css
+   Phase 2: the lobby. Static half (plaster wall, brass sconce, name
+   lettering, call plaque, elevator joinery) plus the sequence half
+   (reveal, indicator flicker, split-flap hint, call-button physics,
+   the frozen door keyframes).
+
+   Extends — never redefines — styles/base.css:
+     .scene/.is-active, .plaque material, .brass-text bevel,
+     --font-display / --font-mono, brass/amber/mahogany tokens.
+
+   Ownership (frozen seam contract v1):
+     - this file owns every @keyframes (lobby-sheen, lobby-dust,
+       lobby-flicker, lobby-door-l, lobby-door-r), every transition,
+       and the prefers-reduced-motion block.
+     - lobby.js owns: inline transform on .lobby-light only, --lx/--ly
+       on the .lobby root, per-mote --dx/--dy/--dur/--delay, class
+       toggles, textContent on .lobby-flap, all timers.
+     - NO transition/animation is declared on .lobby-light or
+       .lobby-frame-shadow (JS drives them per-frame; CSS would lag).
+     - Every animation is transform/opacity only. Every glow is a
+       pre-blurred layer (static filter/box-shadow) whose opacity or
+       transform moves.
+   =========================================================================== */
+
+
+/* ---------------------------------------------------------------------------
+   1 · Scene root — lobby-owned tokens + light-vector defaults
+   --------------------------------------------------------------------------- */
+
+.lobby {
+  /* timing tokens mirrored by lobby.js TIMING: clack 90, doorTotal 1400,
+     frameSlide 1200 — keep exact */
+  --dur-clack: 90ms;
+  --dur-door: 1400ms;
+  --dur-frame: 1200ms;
+  --ease-mech: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-door: cubic-bezier(0.6, 0.04, 0.2, 1);
+
+  /* light vector, driven per-frame by lobby.js (default: sconce rest) */
+  --lx: 0;
+  --ly: 0;
+
+  /* the cone screen-blends against the lobby, never against a passing scene */
+  isolation: isolate;
+}
+
+
+/* ---------------------------------------------------------------------------
+   2 · The wall — full-viewport plaster
+   Base #cfc6b8 under a wall-LOCAL low-frequency feTurbulence plaster grain
+   (distinct from the global body::after film grain), two soft radial
+   vignettes darkening the edges, and a vertical pass lighter at sconce
+   height (~40%). CSS-only, static.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-color: #cfc6b8;
+  background-image:
+    /* vignette 1 — edges fall into shaft-dark */
+    radial-gradient(130% 100% at 50% 42%,
+      transparent 44%,
+      rgba(26, 20, 16, .32) 100%),
+    /* vignette 2 — cooler pool off the top-right corner */
+    radial-gradient(85% 110% at 90% 6%,
+      transparent 42%,
+      rgba(26, 20, 16, .26) 100%),
+    /* vertical pass, lighter at sconce height */
+    linear-gradient(180deg,
+      rgba(26, 20, 16, .15) 0%,
+      rgba(255, 248, 230, .12) 30%,
+      rgba(255, 248, 230, .17) 41%,
+      rgba(26, 20, 16, .08) 68%,
+      rgba(26, 20, 16, .30) 100%),
+    /* wall-local plaster grain: low frequency, big soft mottle */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='plaster-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.013' numOctaves='4' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='420' height='420' filter='url(%23plaster-grain)' opacity='0.45'/%3E%3C/svg%3E");
+}
+
+/* the sconce fixture — pure CSS shapes at ~15% left / ~40% top:
+   uplight shade, stem, rolled backplate */
+.lobby .lobby-wall::before {
+  content: "";
+  position: absolute;
+  left: 15%;
+  top: 40%;
+  width: 26px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  background:
+    /* bulb point, seated in the shade */
+    radial-gradient(circle at 50% 16%,
+      rgba(255, 228, 168, .95) 0 3px,
+      rgba(255, 196, 116, .55) 4px,
+      transparent 9px),
+    /* uplight shade cup */
+    linear-gradient(180deg,
+      #f0d49a 0%,
+      var(--brass) 48%,
+      var(--brass-lo) 100%),
+    /* stem */
+    linear-gradient(90deg,
+      var(--brass-lo),
+      var(--brass-hi) 50%,
+      var(--brass-lo)),
+    /* backplate */
+    linear-gradient(90deg,
+      var(--brass-lo),
+      var(--brass) 42%,
+      var(--brass-hi) 58%,
+      var(--brass-lo));
+  background-size:
+    100% 100%,
+    26px 15px,
+    4px 14px,
+    10px 44px;
+  background-position:
+    0 0,
+    50% 10px,
+    50% 25px,
+    50% 32px;
+  background-repeat: no-repeat;
+  box-shadow: 0 3px 7px rgba(20, 14, 8, .45);
+}
+
+/* the sconce's standing warm pool — pre-blurred, static, screen-blended */
+.lobby .lobby-wall::after {
+  content: "";
+  position: absolute;
+  left: 15%;
+  top: 38%;
+  width: 36vmin;
+  height: 36vmin;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(255, 208, 130, .5) 0%,
+    rgba(255, 180, 90, .22) 34%,
+    transparent 68%);
+  filter: blur(6px);
+  mix-blend-mode: screen;
+}
+
+
+/* ---------------------------------------------------------------------------
+   3 · The tracking light
+   .lobby-light is positioned at the sconce and moved ONLY by lobby.js
+   (inline transform, lerped toward the cursor) — no transition/animation
+   here. The cone is one large pre-blurred radial gradient, screen-blended.
+   .lobby-dust rides inside the light, clipped to its footprint, so motes
+   are only ever visible inside the cone and track it for free.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-light {
+  position: absolute;
+  left: 15%;
+  top: 40%;
+  width: 0;
+  height: 0;
+  z-index: 7;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.lobby .lobby-cone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 135vmin;
+  height: 135vmin;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle,
+    rgba(255, 216, 146, .40) 0%,
+    rgba(255, 196, 116, .24) 22%,
+    rgba(255, 176, 88, .10) 46%,
+    rgba(255, 176, 88, 0) 68%);
+  filter: blur(28px);
+  mix-blend-mode: screen;
+}
+
+.lobby .lobby-dust {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 118vmin;
+  height: 118vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  overflow: hidden;                 /* motes never escape the footprint */
+  pointer-events: none;
+}
+
+.lobby .lobby-mote {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 238, 196, .95) 0%,
+    rgba(255, 214, 150, .45) 55%,
+    rgba(255, 214, 150, 0) 100%);
+  box-shadow: 0 0 5px rgba(255, 220, 150, .55);   /* static halo */
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: lobby-dust var(--dur, 2500ms) linear var(--delay, 0ms) 1 forwards;
+}
+
+
+/* ---------------------------------------------------------------------------
+   4 · Name lettering + tagline
+   .lobby-name extends base .brass-text: the 4-layer bevel's cast shadow and
+   warm bloom are kept, while the glyph face itself takes a background-clip
+   brass gradient biased top-left — toward the sconce.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-name.brass-text {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  margin: 0;
+  font-size: clamp(2.4rem, 8vw, 8.5rem);
+  line-height: 1.05;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .lobby .lobby-name.brass-text {
+    background-image: linear-gradient(118deg,
+      #f9e7b4 0%,
+      var(--brass-hi) 18%,
+      var(--brass) 46%,
+      var(--brass-lo) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    /* the gradient carries the bevel; keep the wall-cast shadow + bloom */
+    text-shadow:
+      3px 5px 10px rgba(0, 0, 0, .55),
+      0 0 22px rgba(230, 200, 138, .16);
+  }
+}
+
+.lobby .lobby-tagline {
+  position: absolute;
+  left: 50%;
+  top: calc(45% + clamp(2.6rem, 6.5vw, 6rem));
+  transform: translateX(-50%);
+  z-index: 3;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(.68rem, 1.05vw, .92rem);
+  font-weight: 500;
+  letter-spacing: .46em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(46, 34, 23, .85);                   /* sunk into the plaster */
+  text-shadow: 0 1px 0 rgba(255, 250, 240, .55);  /* engraved lower lip */
+  pointer-events: none;
+}
+
+
+/* ---------------------------------------------------------------------------
+   5 · The elevator — shadow, frame, panel, joinery
+   The frame waits translated off-viewport right; on .is-revealed the wall
+   panel (.lobby-elevator::before) slides right out while the frame rides
+   home over var(--dur-frame) on --ease-mech. The cast shadow is pre-blurred
+   and mapped per-frame from --lx/--ly by calc() alone — no transition.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-elevator {
+  position: absolute;
+  right: clamp(6rem, 14vw, 12.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  width: clamp(220px, 24vw, 360px);
+  height: clamp(320px, 58vh, 560px);
+  pointer-events: none;               /* the call button opts back in */
+}
+
+/* cast shadow of the frame on the plaster — JS-mapped, pre-blurred */
+.lobby .lobby-frame-shadow {
+  position: absolute;
+  inset: 4% -7% -5% 3%;
+  z-index: 1;
+  background: radial-gradient(115% 105% at 28% 32%,
+    rgba(26, 18, 12, .06) 38%,
+    rgba(26, 18, 12, .52) 100%);
+  filter: blur(22px);                              /* static pre-blur */
+  transform: translate3d(calc(var(--lx, 0) * -18px), calc(var(--ly, 0) * -12px), 0);
+}
+
+/* the wall panel that parts to reveal the frame */
+.lobby .lobby-elevator::before {
+  content: "";
+  position: absolute;
+  inset: -2.5% -3.5%;
+  z-index: 5;
+  background:
+    linear-gradient(90deg,
+      rgba(0, 0, 0, .16),
+      transparent 16% 84%,
+      rgba(0, 0, 0, .16)),
+    linear-gradient(180deg,
+      rgba(255, 250, 238, .09),
+      transparent 32% 68%,
+      rgba(0, 0, 0, .13)),
+    #cfc6b8;
+  box-shadow: -8px 0 22px rgba(24, 16, 10, .35);   /* static cast */
+  transform: translateX(0);
+  transition: transform var(--dur-frame) var(--ease-mech);
+  will-change: transform;
+}
+
+.lobby .lobby-elevator.is-revealed::before {
+  transform: translateX(132%);                     /* clears the viewport */
+}
+
+/* brass-framed opening; dark shaft behind */
+.lobby .lobby-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: linear-gradient(180deg, #150e08 0%, #0c0805 100%);
+  border: clamp(7px, 1vw, 12px) solid;
+  border-image: linear-gradient(165deg,
+    var(--brass-hi) 0%,
+    var(--brass) 42%,
+    var(--brass-lo) 92%) 1;
+  box-shadow:
+    0 14px 34px rgba(18, 12, 6, .45),              /* static cast */
+    inset 0 0 0 1px rgba(0, 0, 0, .6);
+  transform: translateX(110%);                     /* parked off-viewport */
+  transition: transform var(--dur-frame) var(--ease-mech);
+  will-change: transform;
+}
+
+.lobby .lobby-elevator.is-revealed .lobby-frame {
+  transform: translateX(0);
+}
+
+/* warm cab-light behind the doors — revealed, never animated per-frame */
+.lobby .lobby-glow {
+  position: absolute;
+  inset: 14.5% 5.5% 4%;
+  z-index: 1;
+  background: radial-gradient(120% 105% at 50% 26%,
+    #ffe0aa 0%,
+    var(--amber) 30%,
+    #c07828 52%,
+    var(--mahogany-hi) 76%,
+    var(--mahogany) 96%);
+  opacity: 0;
+  transition: opacity 480ms linear;
+}
+
+.lobby .lobby-elevator.doors-open .lobby-glow {
+  opacity: 1;
+}
+
+/* the opening: clipped so the doors vanish into the jambs */
+.lobby .lobby-doors {
+  position: absolute;
+  inset: 14.5% 5.5% 4%;
+  z-index: 2;
+  display: flex;
+  overflow: hidden;
+}
+
+/* mahogany panels with a brass seam strip; translateX only, ever */
+.lobby .lobby-door {
+  width: 50%;
+  height: 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    inset 0 -2px 6px rgba(0, 0, 0, .5);
+  will-change: transform;
+}
+
+.lobby .lobby-door--left {
+  background:
+    linear-gradient(90deg,
+      transparent 0,
+      transparent calc(100% - 12px),
+      rgba(230, 200, 138, .55) calc(100% - 12px),
+      rgba(176, 141, 87, .9) calc(100% - 6px),
+      var(--brass-lo) calc(100% - 3px),
+      rgba(0, 0, 0, .65) 100%),
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, .16) 0 2px,
+      transparent 2px 30px),
+    linear-gradient(180deg,
+      var(--mahogany-hi) 0%,
+      var(--mahogany) 34%,
+      #2a180e 92%);
+}
+
+.lobby .lobby-door--right {
+  background:
+    linear-gradient(270deg,
+      transparent 0,
+      transparent calc(100% - 12px),
+      rgba(230, 200, 138, .55) calc(100% - 12px),
+      rgba(176, 141, 87, .9) calc(100% - 6px),
+      var(--brass-lo) calc(100% - 3px),
+      rgba(0, 0, 0, .65) 100%),
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, .16) 0 2px,
+      transparent 2px 30px),
+    linear-gradient(180deg,
+      var(--mahogany-hi) 0%,
+      var(--mahogany) 34%,
+      #2a180e 92%);
+}
+
+.lobby .lobby-elevator.doors-open .lobby-door--left {
+  animation: lobby-door-l var(--dur-door) var(--ease-door) forwards;
+}
+
+.lobby .lobby-elevator.doors-open .lobby-door--right {
+  animation: lobby-door-r calc(var(--dur-door) * 0.85) var(--ease-door) forwards;
+}
+
+
+/* ---------------------------------------------------------------------------
+   6 · The split-flap indicator
+   Two dark cells with a horizontal parting seam. Unlit: barely there.
+   .is-lit runs the flicker (3 dips, 120ms apart at 480ms) then holds;
+   .is-spinning gives a subtle scaleY settle while lobby.js swaps chars.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-indicator {
+  position: absolute;
+  top: 4.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: .3em;
+  padding: .3em .45em;
+  font-family: var(--font-mono);
+  font-size: clamp(1.05rem, 1.7vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(239, 230, 213, .13);
+  background: linear-gradient(180deg, #1c130c 0%, #100a06 100%);
+  border: 1px solid rgba(176, 141, 87, .5);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, .75),
+    0 1px 0 rgba(255, 248, 230, .22);
+  opacity: .55;
+}
+
+.lobby .lobby-indicator.is-lit {
+  color: var(--amber);
+  opacity: 1;
+  animation: lobby-flicker 480ms linear forwards;
+}
+
+.lobby .lobby-flap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15ch;
+  height: 1.65em;
+  padding: 0 .12em;
+  border-radius: 2px;
+  /* the parting seam of the flap, dead center */
+  background: linear-gradient(180deg,
+    #2b1e13 0%,
+    #171009 46%,
+    #0f0a06 54%,
+    #241810 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    inset 0 -1px 0 rgba(0, 0, 0, .6),
+    0 1px 0 rgba(255, 255, 255, .05);
+  transition: transform var(--dur-clack) var(--ease-mech);
+}
+
+.lobby .lobby-indicator.is-lit .lobby-flap {
+  text-shadow: 0 0 8px rgba(255, 181, 77, .65);    /* static backlight */
+}
+
+.lobby .lobby-indicator.is-spinning .lobby-flap {
+  transform: scaleY(.9);                           /* subtle spin hint */
+}
+
+
+/* ---------------------------------------------------------------------------
+   7 · The call button
+   Heavy round brass bezel on the wall beside the doors. Dimmed and dead
+   until .is-live; .is-pressed depresses 80ms and springs back over the
+   base 200ms transition, while the pre-blurred amber halo fades in and
+   stays lit for the remainder of the scene.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-call {
+  position: absolute;
+  right: clamp(-4.2rem, -3.4vw, -2.8rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: clamp(64px, 5.4vw, 84px);                 /* >= 64px touch target */
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid var(--brass-lo);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%,
+      rgba(255, 255, 255, .35) 0%,
+      transparent 34%),
+    radial-gradient(circle at 50% 50%,
+      var(--brass-hi) 0%,
+      var(--brass) 42%,
+      var(--brass-lo) 88%);
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, .35),
+    inset 0 -3px 6px rgba(0, 0, 0, .45),
+    0 6px 14px rgba(20, 14, 8, .5);                /* static cast */
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 200ms var(--ease-mech);    /* spring back */
+}
+
+/* the push disc */
+.lobby .lobby-call::before {
+  content: "";
+  position: absolute;
+  inset: 17%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%,
+    #e2bd80 0%,
+    var(--brass) 52%,
+    var(--brass-lo) 95%);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, .5),
+    inset 0 -1px 2px rgba(255, 255, 255, .25);
+}
+
+.lobby .lobby-call:disabled {
+  filter: brightness(.66) saturate(.55);           /* static, unlit brass */
+}
+
+.lobby .lobby-call.is-live {
+  cursor: pointer;
+  filter: none;
+}
+
+.lobby .lobby-call.is-pressed {
+  transform: translateY(-50%) scale(.92);
+  transition-duration: 80ms;                       /* depress down */
+}
+
+/* pre-blurred amber backlight — fades in on press and stays */
+.lobby .lobby-call-halo {
+  position: absolute;
+  inset: -48%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255, 181, 77, .8) 0%,
+    rgba(255, 181, 77, .32) 46%,
+    rgba(255, 181, 77, 0) 70%);
+  filter: blur(12px);                              /* static pre-blur */
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 320ms linear;
+  pointer-events: none;
+}
+
+.lobby .lobby-call.is-pressed .lobby-call-halo {
+  opacity: 1;
+}
+
+.lobby .lobby-call:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 4px;
+}
+
+
+/* ---------------------------------------------------------------------------
+   8 · The call plaque
+   Extends base .plaque (material, screws, hover lift all inherited) with
+   sizing, the idle breathing sheen, and the filament bloom on hover/focus.
+   .lobby.is-called kills the sheen for good.
+   --------------------------------------------------------------------------- */
+
+.lobby .lobby-plaque {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 69%;
+  margin-inline: auto;                 /* centered without a transform, */
+  width: max-content;                  /* so base .plaque:hover stays intact */
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;                     /* >= 64px touch target, both axes */
+  min-height: 64px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lobby .lobby-plaque:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 4px;
+}
+
+.lobby .lobby-plaque-label {
+  pointer-events: none;
+}
+
+/* idle sheen — a faint diagonal sweep across the rolled plate every 4s.
+   Anchored to the plaque box (label stays static); opacity gates the
+   extremes so the stripe is only visible while crossing the brass. */
+.lobby .lobby-plaque-label::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 46%;
+  background: linear-gradient(115deg,
+    transparent 8%,
+    rgba(255, 252, 240, .5) 50%,
+    transparent 92%);
+  mix-blend-mode: screen;
+  transform: translateX(-150%) skewX(-18deg);
+  opacity: 0;
+  animation: lobby-sheen 4s var(--ease-mech) infinite;
+  pointer-events: none;
+}
+
+.lobby.is-called .lobby-plaque-label::after {
+  animation: none;
+  opacity: 0;
+}
+
+.lobby.is-called .lobby-plaque {
+  cursor: default;
+}
+
+/* filament warm-up — pre-blurred orange bloom behind the brass,
+   600ms opacity ramp on hover/focus plus a brightness step */
+.lobby .lobby-plaque-bloom {
+  position: absolute;
+  inset: -26% -12%;
+  z-index: -1;
+  border-radius: 8px;
+  background: radial-gradient(70% 100% at 50% 60%,
+    rgba(255, 158, 54, .6) 0%,
+    rgba(255, 140, 40, .25) 48%,
+    rgba(255, 140, 40, 0) 72%);
+  filter: blur(14px);                              /* static pre-blur */
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 600ms linear;
+  pointer-events: none;
+}
+
+.lobby .lobby-plaque:hover .lobby-plaque-bloom,
+.lobby .lobby-plaque:focus-visible .lobby-plaque-bloom {
+  opacity: 1;
+}
+
+.lobby .lobby-plaque:hover,
+.lobby .lobby-plaque:focus-visible {
+  filter: brightness(1.06);            /* instant step; never transitioned */
+}
+
+
+/* ---------------------------------------------------------------------------
+   9 · Keyframes — owned outright by lobby-css
+   --------------------------------------------------------------------------- */
+
+/* idle plaque sheen: sweep in the first ~55% of the 4s cycle, then rest */
+@keyframes lobby-sheen {
+  0%   { transform: translateX(-150%) skewX(-18deg); opacity: 0; }
+  10%  { opacity: .55; }
+  38%  { opacity: .55; }
+  55%  { transform: translateX(340%) skewX(-18deg); opacity: 0; }
+  100% { transform: translateX(340%) skewX(-18deg); opacity: 0; }
+}
+
+/* dust motes: drift to their personal --dx/--dy, fade in then out */
+@keyframes lobby-dust {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  14%  { opacity: .85; }
+  68%  { opacity: .5; }
+  100% { transform: translate3d(var(--dx, 0px), var(--dy, -40px), 0); opacity: 0; }
+}
+
+/* indicator wake: 3 dips at 120ms intervals (25/50/75% of 480ms), holds lit */
+@keyframes lobby-flicker {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  25%  { opacity: .12; }
+  38%  { opacity: .95; }
+  50%  { opacity: .08; }
+  63%  { opacity: .85; }
+  75%  { opacity: .18; }
+  100% { opacity: 1; }
+}
+
+/* frozen door choreography: 60% travel at 35.7% (500ms), stall to 46.4%
+   (650ms), home at 100% (1400ms). translateX only. */
+@keyframes lobby-door-l {
+  0%    { transform: translateX(0); }
+  35.7% { transform: translateX(-60%); }
+  46.4% { transform: translateX(-60%); }
+  100%  { transform: translateX(-101%); }
+}
+
+@keyframes lobby-door-r {
+  0%    { transform: translateX(0); }
+  35.7% { transform: translateX(60%); }
+  46.4% { transform: translateX(60%); }
+  100%  { transform: translateX(101%); }
+}
+
+
+/* ---------------------------------------------------------------------------
+   10 · Small screens
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .lobby .lobby-elevator {
+    right: 3vw;
+    top: 52%;
+    width: clamp(170px, 46vw, 260px);
+  }
+
+  /* the button swaps to the wall left of the doors to stay on screen */
+  .lobby .lobby-call {
+    right: auto;
+    left: clamp(-3.8rem, -3vw, -2.6rem);
+  }
+
+  .lobby .lobby-plaque {
+    top: 84%;
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   11 · Reduced motion
+   Zero every lobby animation/transition so the JS-collapsed timeline snaps
+   straight from plaque click to open doors; the plaque keeps a static
+   highlight instead of the sweep.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby,
+  .lobby *,
+  .lobby *::before,
+  .lobby *::after {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+
+  .lobby .lobby-plaque-label::after {
+    animation: none;
+    transform: translateX(-20%) skewX(-18deg);
+    opacity: .22;                                  /* static highlight */
+  }
+}
