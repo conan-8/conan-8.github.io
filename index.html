@@ -1,28 +1,30 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Conan — Personal Site</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#120d08">
+  <meta name="description" content="THE ELEVATOR — a vertical ride in eight states. Phase 0: the foundation.">
+  <title>THE ELEVATOR</title>
+
+  <!-- Anti-flash: paint the shaft dark before the first frame, so the cab
+       never arrives through a white doorway. #120d08 is the --bg token. -->
+  <style>html { background: #120d08; }</style>
+
+  <!-- Type: Cormorant Garamond for the brass display lettering,
+       IBM Plex Mono for the engraved plates and floor indicators. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./styles/base.css">
 </head>
 <body>
-  <main>
-    <h1>Conan</h1>
-    <p class="tagline">Student, tinkerer, occasional writer.</p>
+  <!-- The single mount point. Deliberately empty in markup: every scene is
+       pushed onto #stage at runtime by src/main.js through src/stage.js. -->
+  <main id="stage"></main>
 
-    <section>
-      <h2>About</h2>
-      <p>A couple of sentences about who you are and what you're working on.</p>
-    </section>
-
-    <section>
-      <h2>Elsewhere</h2>
-      <ul>
-        <li><a href="https://github.com/conan-8">GitHub</a></li>
-        <li><a href="mailto:you@example.com">Email</a></li>
-      </ul>
-    </section>
-  </main>
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

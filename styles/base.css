@@ -1,0 +1,241 @@
+/* ===========================================================================
+   THE ELEVATOR — styles/base.css
+   Phase 0 foundation: the design-token table, a minimal reset, the
+   stage/scene contract, the brass material language, and the film grain
+   that sits over everything.
+
+   Owned contracts (consumed verbatim by src/*.js):
+     - the :root token table            (R14)
+     - .scene / .scene.is-active        (R17)
+     - .brass-text                      (R18)
+     - .plaque                          (R19)
+     - the body::after grain overlay    (R20)
+   =========================================================================== */
+
+
+/* ---------------------------------------------------------------------------
+   1 · Design tokens
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* metals */
+  --brass: #b08d57;
+  --brass-hi: #e6c88a;
+  --brass-lo: #6e5426;
+
+  /* woodwork & structure */
+  --mahogany: #3a2418;
+  --mahogany-hi: #5a3a26;
+  --steel: #8a8f94;
+  --steel-dk: #4a4e52;
+
+  /* light & lettering — --cream is the LIGHT text color, --ink the DARK one */
+  --amber: #ffb54d;
+  --cream: #efe6d5;
+  --ink: #1a1410;
+
+  /* type */
+  --font-display: "Cormorant Garamond", serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* motion — transform/opacity only, always */
+  --ease-shudder: cubic-bezier(.36,.07,.19,.97);
+  --ease-mech: cubic-bezier(.64,.05,.36,1);
+  --dur-door: 1.4s;
+  --dur-clack: 90ms;
+
+  /* environment (additional tokens) */
+  --bg: #120d08;            /* shaft-dark; mirrors the anti-flash style in index.html */
+  --grain-opacity: 0.05;    /* film-grain strength */
+  --z-grain: 90;            /* grain sits above every scene layer */
+}
+
+
+/* ---------------------------------------------------------------------------
+   2 · Reset
+   --------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;               /* the ride never scrolls */
+  background: var(--bg);
+  color: var(--cream);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--brass);
+  color: var(--ink);
+}
+
+
+/* ---------------------------------------------------------------------------
+   3 · Stage & scene contract
+   #stage is the fixed, full-viewport mount point claimed by src/stage.js.
+   Scenes stack inside it; stage.js assigns each layer an inline z-index,
+   so scenes (and this file) never set one of their own.
+   --------------------------------------------------------------------------- */
+
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100dvw;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.scene.is-active {
+  visibility: visible;
+}
+
+
+/* ---------------------------------------------------------------------------
+   4 · Material — brass lettering
+   Raised, polished brass type: the face catches the lamp top-left
+   (--brass-hi), the bottom-right edge falls into shade (--brass-lo),
+   and a soft cast shadow lifts each letter off the shaft wall.
+   Pure layered text-shadow — no images.
+   --------------------------------------------------------------------------- */
+
+.brass-text {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: .045em;
+  color: var(--brass);
+  text-shadow:
+    -1px -1px 0 var(--brass-hi),                 /* light catch, top-left */
+     1px  1px 0 var(--brass-lo),                 /* bevel shade, bottom-right */
+     2px  2px 1px var(--brass-lo),               /* deeper bevel pass */
+     3px  5px 10px rgba(0, 0, 0, .55),           /* cast shadow off the wall */
+     0 0 22px rgba(230, 200, 138, .16);          /* faint warm bloom */
+}
+
+
+/* ---------------------------------------------------------------------------
+   5 · Material — screwed-in brass plaque
+   A rolled plate: diagonal sheen over fine horizontal brushing over the
+   brass gradient itself; engraved mono type sunk into the metal
+   (dark inner shadow above, bright catch below). Slotted steel screws
+   at either side via pseudo-elements.
+   --------------------------------------------------------------------------- */
+
+.plaque {
+  position: relative;
+  display: inline-block;
+  padding: .9em 2.5em .8em;
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 500;
+  letter-spacing: .34em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ink);
+  background:
+    linear-gradient(105deg,
+      transparent 0%,
+      rgba(255, 255, 255, .14) 16%,
+      transparent 36%),
+    repeating-linear-gradient(0deg,
+      rgba(255, 255, 255, .05) 0 1px,
+      transparent 1px 3px),
+    linear-gradient(165deg,
+      var(--brass-hi) 0%,
+      var(--brass) 38%,
+      var(--brass-lo) 82%,
+      var(--brass) 100%);
+  border: 1px solid var(--brass-lo);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .4),       /* rolled top edge */
+    inset 0 -1px 0 rgba(0, 0, 0, .35),           /* rolled bottom edge */
+    0 3px 8px rgba(0, 0, 0, .5);                 /* plate standing off the wall */
+  text-shadow:
+    0 -1px 0 rgba(0, 0, 0, .4),                  /* engraving: dark inner top */
+    0 1px 0 var(--brass-hi);                     /* engraving: bright lower lip */
+  transition: transform var(--dur-clack) var(--ease-mech);
+}
+
+/* slotted steel screws, left and right */
+.plaque::before,
+.plaque::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: .55em;
+  height: .55em;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background:
+    linear-gradient(135deg,
+      transparent 43%,
+      rgba(0, 0, 0, .55) 46%,
+      rgba(0, 0, 0, .55) 54%,
+      transparent 57%),
+    radial-gradient(circle at 32% 28%,
+      var(--steel) 0%,
+      var(--steel-dk) 55%,
+      #22252a 100%);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, .3),
+    inset 0 -1px 1px rgba(0, 0, 0, .5);
+}
+
+.plaque::before { left: .9em; }
+.plaque::after  { right: .9em; }
+
+.plaque:hover {
+  transform: translateY(-1px);
+}
+
+
+/* ---------------------------------------------------------------------------
+   6 · Film grain
+   A fixed feTurbulence layer over the whole viewport, blended into the
+   scene stack. pointer-events: none — the grain never intercepts a press.
+   (The SVG's xmlns is percent-encoded so this file carries no foreign URLs.)
+   --------------------------------------------------------------------------- */
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' width='180' height='180'%3E%3Cfilter id='lift-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23lift-grain)'/%3E%3C/svg%3E");
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+
+/* ---------------------------------------------------------------------------
+   7 · Reduced motion
+   Motion lives in src/motion.js (which honors prefers-reduced-motion in JS);
+   the one CSS transition above is likewise collapsed to zero duration.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .plaque {
+    transition-duration: 0s;
+  }
+}
