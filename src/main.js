@@ -23,6 +23,7 @@ import { createStage } from './stage.js';
 import * as engine from './audio/engine.js';
 import * as soundcheck from './audio/soundcheck.js';
 import { createScene as createLobbyScene } from './scenes/lobby.js';
+import { createScene as createCabScene } from './scenes/cab.js';
 
 const STATES = [
   'BOOT',
@@ -113,6 +114,7 @@ for (const name of STATES) {
   factories[name] = createPlaceholderScene(name);
 }
 factories.LOBBY = createLobbyScene;
+factories.CAB = createCabScene;
 
 // Live scene instances keyed by state name, plus the outgoing scene
 // tracked from state:exit's detail.from (R44).

@@ -7,6 +7,7 @@
 //
 // deps = { state, motion } exactly (the frozen Phase 0 call site in main.js).
 // sfx, ambient and SITE are imported directly (R6).
+// createSplitFlap imported from ../chrome/indicator.js (R1 — Phase 3 extraction).
 //
 // Seam contract (FROZEN v1 — identical in the CSS part):
 //   - DOM skeleton built byte-for-byte as specified below (R41).
@@ -39,6 +40,7 @@
 import * as sfx from '../audio/sfx.js';
 import * as ambient from '../audio/ambient.js';
 import { SITE } from '../content.js';
+import { createSplitFlap } from '../chrome/indicator.js';
 
 // === TIMING (R9) ============================================================
 // Single source for ALL sequence timing — ms from plaque click unless noted.
@@ -70,122 +72,6 @@ const TIMING = Object.freeze({
   particles: 20,        // dust mote count at reveal
   particleLife: 2500,   // mote lifetime (CSS keyframe duration)
 });
-
-// === SPLIT-FLAP INDICATOR (R22/R23 — inline, Phase-3-extractable) ===========
-// Self-contained factory over the two .lobby-flap cells. The clack sound is
-// an injected dependency; Phase 3 lifts this function into chrome/indicator.js
-// with minimal diff. Exposes set(char, {spin}) and countThrough([chars]) ->
-// Promise. Single-char values render right-aligned with a blank leading slot
-// ('L' -> [' ', 'L']).
-const FLAP_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-function createSplitFlap(cells, { clackMs, spinMs, onClack }) {
-  const timers = new Set();
-  let runToken = 0; // bumping the token cancels every in-flight run
-
-  function later(fn, ms) {
-    const id = setTimeout(() => {
-      timers.delete(id);
-      fn();
-    }, ms);
-    timers.add(id);
-    return id;
-  }
-
-  /** Render a value across the two cells, right-aligned, uppercased. */
-  function render(value) {
-    const raw = String(value == null ? '' : value).toUpperCase();
-    const body = raw.length > 2 ? raw.slice(-2) : raw.padStart(2, ' ');
-    cells[0].textContent = body[0];
-    cells[1].textContent = body[1];
-  }
-
-  function scramble(len) {
-    let out = '';
-    for (let i = 0; i < len; i++) {
-      out += FLAP_GLYPHS[(Math.random() * FLAP_GLYPHS.length) | 0];
-    }
-    return out;
-  }
-
-  function clack() {
-    if (onClack) onClack();
-  }
-
-  /**
-   * set(char, {spin}) — render char; with spin:true, rattle through random
-   * glyphs one change per clackMs, decelerating over ~spinMs, then settle on
-   * char. Resolves when settled (immediately without spin).
-   */
-  function set(value, options) {
-    cancel();
-    const spin = !!(options && options.spin);
-    if (!spin) {
-      render(value);
-      return Promise.resolve();
-    }
-    const token = runToken;
-    return new Promise((resolve) => {
-      // Decelerating schedule: interval_i = clackMs * (1 + i * 0.35),
-      // accumulated until the run spans ~spinMs.
-      let at = 0;
-      let i = 0;
-      while (at < spinMs) {
-        at += clackMs * (1 + i * 0.35);
-        i += 1;
-        later(() => {
-          if (token !== runToken) return;
-          render(scramble(2));
-          clack();
-        }, at);
-      }
-      later(() => {
-        if (token !== runToken) return;
-        render(value);
-        resolve();
-      }, at + clackMs);
-    });
-  }
-
-  /**
-   * countThrough([chars]) — walk the flap through each value in order: three
-   * rapid clack-steps per transition (clack each), the third landing on the
-   * target. Resolves after the final settle.
-   */
-  function countThrough(values) {
-    cancel();
-    const token = runToken;
-    const list = Array.isArray(values) ? values.slice() : [values];
-    return new Promise((resolve) => {
-      let at = 0;
-      for (const value of list) {
-        for (let k = 0; k < 3; k++) {
-          at += clackMs;
-          const lands = k === 2;
-          later(() => {
-            if (token !== runToken) return;
-            render(lands ? value : scramble(2));
-            clack();
-          }, at);
-        }
-        at += clackMs * 2; // mechanical breath between transitions
-      }
-      later(() => {
-        if (token !== runToken) return;
-        resolve();
-      }, at);
-    });
-  }
-
-  /** Cancel every pending step; unresolved promises simply never resolve. */
-  function cancel() {
-    runToken += 1;
-    for (const id of timers) clearTimeout(id);
-    timers.clear();
-  }
-
-  return { set, countThrough, cancel, render };
-}
 
 // === THE LOBBY SCENE ========================================================
 
