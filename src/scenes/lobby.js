@@ -22,9 +22,10 @@
 //     .lobby root per frame; per-mote --dx/--dy/--dur/--delay inline.
 //   - Animation ownership (R44): CSS owns every @keyframes/transition. This
 //     module owns ONLY: per-frame inline transform on .lobby-light, per-frame
-//     --lx/--ly on the root (CSS maps them to .lobby-frame-shadow via calc —
-//     we NEVER touch .lobby-frame-shadow.style), .lobby-flap textContent
-//     swaps, class toggles, and all timers.
+//     --lx/--ly on the root (CSS maps them to .lobby-frame-shadow AND
+//     .lobby-name-shadow via calc — we NEVER touch either's .style),
+//     .lobby-flap textContent swaps, ONE-time textContent on .lobby-name-shadow,
+//     class toggles, and all timers.
 //   - TIMING mirrors the CSS tokens exactly (R46): clack = --dur-clack (90),
 //     doorTotal = --dur-door (1400), frameSlide = --dur-frame (1200).
 //
@@ -195,6 +196,7 @@ export function createScene(deps) {
   el.innerHTML = `
   <div class="lobby-wall"></div>
   <div class="lobby-light"><div class="lobby-cone"></div><div class="lobby-dust"></div></div>
+  <div class="lobby-name-shadow" aria-hidden="true"></div>
   <h1 class="lobby-name brass-text"></h1>
   <p class="lobby-tagline"></p>
   <div class="lobby-elevator">
@@ -214,6 +216,7 @@ export function createScene(deps) {
   const lightEl = el.querySelector('.lobby-light');
   const dustEl = el.querySelector('.lobby-dust');
   const nameEl = el.querySelector('.lobby-name');
+  const nameShadowEl = el.querySelector('.lobby-name-shadow');
   const taglineEl = el.querySelector('.lobby-tagline');
   const elevatorEl = el.querySelector('.lobby-elevator');
   const indicatorEl = el.querySelector('.lobby-indicator');
@@ -222,7 +225,10 @@ export function createScene(deps) {
   const plaqueBtn = el.querySelector('.lobby-plaque');
 
   // Lettering comes from content.js — never hardcoded (R2/R15/R16).
+  // The name's tracking cast is a sibling node (CSS drives its transform
+  // from --lx/--ly); it mirrors the name's text once, set here.
   nameEl.textContent = SITE.name;
+  nameShadowEl.textContent = SITE.name;
   taglineEl.textContent = SITE.tagline;
 
   // --- Instance state (closure-local; the FSM edge is the structural

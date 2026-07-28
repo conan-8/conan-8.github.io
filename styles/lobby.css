@@ -216,10 +216,36 @@
 
 /* ---------------------------------------------------------------------------
    4 · Name lettering + tagline
-   .lobby-name extends base .brass-text: the 4-layer bevel's cast shadow and
-   warm bloom are kept, while the glyph face itself takes a background-clip
-   brass gradient biased top-left — toward the sconce.
+   .lobby-name extends base .brass-text: the bevel + warm bloom are kept as
+   static text-shadow (they are the material, light-independent), while the
+   wall-cast shadow is a separate pre-blurred sibling (.lobby-name-shadow)
+   whose offset is calc-mapped per-frame from --lx/--ly — same pattern as
+   .lobby-frame-shadow, transform-only, so the lettering answers the light.
+   The glyph face itself takes a background-clip brass gradient biased
+   top-left — toward the sconce.
    --------------------------------------------------------------------------- */
+
+/* tracking cast of the name on the plaster — JS-mapped, pre-blurred.
+   Resting offset (3px, 5px) matches the old static cast; the light vector
+   swings it the other way, so the shadow always falls away from the cone. */
+.lobby .lobby-name-shadow {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  z-index: 2;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: .045em;
+  font-size: clamp(2.4rem, 8vw, 8.5rem);
+  line-height: 1.05;
+  white-space: nowrap;
+  color: rgba(24, 16, 10, .5);
+  filter: blur(8px);                               /* static pre-blur */
+  pointer-events: none;
+  transform: translate(-50%, -50%)
+    translate3d(calc(3px + var(--lx, 0) * -14px), calc(5px + var(--ly, 0) * -10px), 0);
+}
 
 .lobby .lobby-name.brass-text {
   position: absolute;
@@ -232,6 +258,12 @@
   line-height: 1.05;
   white-space: nowrap;
   pointer-events: none;
+  /* bevel + bloom stay static; the cast moved to .lobby-name-shadow */
+  text-shadow:
+    -1px -1px 0 var(--brass-hi),
+     1px  1px 0 var(--brass-lo),
+     2px  2px 1px var(--brass-lo),
+     0 0 22px rgba(230, 200, 138, .16);
 }
 
 @supports (background-clip: text) or (-webkit-background-clip: text) {
@@ -245,10 +277,8 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    /* the gradient carries the bevel; keep the wall-cast shadow + bloom */
-    text-shadow:
-      3px 5px 10px rgba(0, 0, 0, .55),
-      0 0 22px rgba(230, 200, 138, .16);
+    /* the gradient carries the bevel; cast lives on .lobby-name-shadow */
+    text-shadow: 0 0 22px rgba(230, 200, 138, .16);
   }
 }
 
@@ -514,6 +544,7 @@
   top: 50%;
   transform: translateY(-50%);
   z-index: 6;
+  pointer-events: auto;                            /* opts back in from .lobby-elevator's none */
   width: clamp(64px, 5.4vw, 84px);                 /* >= 64px touch target */
   aspect-ratio: 1;
   padding: 0;
